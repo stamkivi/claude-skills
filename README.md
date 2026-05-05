@@ -65,6 +65,34 @@ ln -sfn ~/git/claude-skills/skills/premortem ~/.claude/skills/premortem
 Slash commands work the same way — they're single `.md` files in
 `~/.claude/commands/`.
 
+## Don't use Claude Code? (Claude.ai web or Claude Desktop)
+
+The `install.sh` flow is for [Claude Code](https://docs.claude.com/claude-code)
+(the CLI/IDE tool). If you only use Claude on the web or in the desktop app,
+you can still use these skills — just copy the prompt content directly. No
+shell required.
+
+**For repeated use (recommended): Project custom instructions**
+
+1. Open the skill's `SKILL.md` on GitHub (e.g.
+   [premortem/SKILL.md](skills/premortem/SKILL.md)).
+2. Click *Raw* and copy the full text.
+3. In Claude Desktop or claude.ai, create a new **Project**.
+4. Paste the SKILL.md content into the Project's *Custom instructions* field.
+5. Any chat in that Project will now follow the skill's instructions. Use the
+   skill by saying e.g. *"premortem this plan: …"* or just by sharing the
+   thing you want reviewed.
+
+**For one-off use: paste at the start of a chat**
+
+Copy the SKILL.md content, paste it as your first message, then add your
+actual question/plan/spec underneath. The skill's instructions stay in
+context for the rest of the conversation.
+
+These skills are written as plain English instructions — they work anywhere
+Claude does. Claude Code just gives you the ergonomic wrapper (slash commands,
+auto-loading via `~/.claude/skills/`).
+
 ## Adding a skill
 
 If you fork this and want to add your own:
