@@ -1,0 +1,34 @@
+#!/bin/bash
+# Block commits that would publish infrastructure identifiers or secrets.
+# This repo is public. Enable once per clone: git config core.hooksPath .githooks
+#
+# Generic patterns live here. Personal ones (your hostnames, usernames) go in
+# .git/info/blocked-patterns, one extended regex per line — that file is never
+# committed, so the patterns themselves stay private.
+
+set -euo pipefail
+
+PATTERNS=(
+  '[a-z0-9-]+\.ts\.net'                              # Tailscale MagicDNS / Funnel hostnames
+  'tail[0-9a-f]{6}'                                  # tailnet names
+  '100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.[0-9]+\.[0-9]+'  # Tailscale CGNAT IPs
+  '192\.168\.[0-9]+\.[0-9]+'                         # LAN IPs
+  '/Users/[a-z][a-z0-9_-]+'                          # macOS home paths (use ~ or $HOME)
+  '(ghp|gho|github_pat|sk-ant|sk-or|sbp|xox[bp])_?[A-Za-z0-9_-]{16,}'  # common token prefixes
+  '-----BEGIN [A-Z ]*PRIVATE KEY-----'
+)
+LOCAL="$(git rev-parse --git-dir)/info/blocked-patterns"
+if [ -f "$LOCAL" ]; then
+  while IFS= read -r p; do [ -n "$p" ] && PATTERNS+=("$p"); done < "$LOCAL"
+fi
+
+added="$(git diff --cached -U0 --no-color | grep '^+' | grep -v '^+++' || true)"
+fail=0
+for p in "${PATTERNS[@]}"; do
+  if hits="$(printf '%s\n' "$added" | grep -nE -e "$p")"; then
+    echo "pre-commit: blocked pattern /$p/ in staged changes:" >&2
+    printf '%s\n' "$hits" | head -5 >&2
+    fail=1
+  fi
+done
+[ $fail -eq 0 ] || { echo "Replace with a generic placeholder, or bypass with --no-verify if intended." >&2; exit 1; }

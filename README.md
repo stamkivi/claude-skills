@@ -1,6 +1,6 @@
 # Claude Code skills & commands
 
-Portable [Claude Code](https://docs.claude.com/claude-code) skills and slash
+Portable [Claude Code](https://code.claude.com/docs/en/overview) skills and slash
 commands. Borrow what you find useful.
 
 ## What's in here
@@ -13,6 +13,7 @@ commands. Borrow what you find useful.
 | [`gstack-designer`](skills/gstack-designer/SKILL.md) | Senior product designer. Reviews specs for design completeness *before* implementation, creates design systems from scratch, or runs visual exploration. Opinionated about typography, color, spacing. |
 | [`gstack-engineer`](skills/gstack-engineer/SKILL.md) | Engineering plan reviewer. Locks in architecture, data flow, edge cases, and test coverage *before* code is written. Catches landmines, ensures observability, maps every failure mode. |
 | [`premortem`](skills/premortem/SKILL.md) | Run a Gary-Klein premortem on any plan, launch, hire, or strategy. Assumes it already failed 6 months from now and works backward to find every reason why. Fans out to sub-agents for diverse failure modes, then produces a revised plan with blind spots exposed. |
+| [`handoff-to-mac-mini`](skills/handoff-to-mac-mini/SKILL.md) | Hand an in-progress project from the laptop to an always-on remote Mac: GitHub repo over HTTPS, secrets piped over ssh, trust dialog pre-accepted, a Claude Code Remote Control server registered so the work is steerable from the Claude app, and a written `HANDOFF.md` brief. Tied to my own setup (expects a remote setup repo with Remote Control scripts); reads the host alias from `$HANDOFF_HOST`. |
 
 The three `gstack-*` skills are distilled from
 [garrytan/gstack](https://github.com/garrytan/gstack) — adapted into the
@@ -67,7 +68,7 @@ Slash commands work the same way — they're single `.md` files in
 
 ## Don't use Claude Code? (Claude.ai web or Claude Desktop)
 
-The `install.sh` flow is for [Claude Code](https://docs.claude.com/claude-code)
+The `install.sh` flow is for [Claude Code](https://code.claude.com/docs/en/overview)
 (the CLI/IDE tool). If you only use Claude on the web or in the desktop app,
 you can still use these skills — just copy the prompt content directly. No
 shell required.
@@ -103,7 +104,22 @@ If you fork this and want to add your own:
 
 A skill is just a directory with a `SKILL.md` file. Claude Code reads the
 SKILL.md when the skill is invoked. Multi-file skills work too — see
-[Claude Code skills docs](https://docs.claude.com/claude-code/skills).
+[Claude Code skills docs](https://code.claude.com/docs/en/skills).
+
+## Contributing / pre-commit guard
+
+This repo is public, so a pre-commit hook blocks infrastructure identifiers
+(Tailscale hostnames and IPs, LAN IPs, `/Users/<name>` paths, common token
+prefixes, private keys) from being committed. Enable it once per clone:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+Add your own private patterns — hostnames, usernames — one regex per line to
+`.git/info/blocked-patterns`. That file is never committed. Skills should take
+machine-specific values from environment variables (like `$HANDOFF_HOST`)
+rather than hardcoding them.
 
 ## License
 

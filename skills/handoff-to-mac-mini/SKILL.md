@@ -1,21 +1,28 @@
 ---
 name: handoff-to-mac-mini
-description: "Move an in-progress coding project from the laptop to uv-mac-mini so work continues there and is steerable from the Claude desktop and mobile apps. Sets up the GitHub repo, syncs the working tree and secrets, registers a Remote Control server, and seeds the session with a written brief. TRIGGERS: 'move this to the mac mini', 'continue this on the mini', 'hand this off to the mac mini', 'run this on uv-mac-mini', 'set this up to run remotely', 'I'm heading out, keep building', 'make this visible in my Claude app'. Use whenever work should outlive the laptop session or run unattended."
+description: "Move an in-progress coding project from the laptop to an always-on remote Mac (the mini) so work continues there and is steerable from the Claude desktop and mobile apps. Sets up the GitHub repo, syncs the working tree and secrets, registers a Remote Control server, and seeds the session with a written brief. TRIGGERS: 'move this to the mac mini', 'continue this on the mini', 'hand this off to the mac mini', 'run this on the remote box', 'set this up to run remotely', 'I'm heading out, keep building', 'make this visible in my Claude app'. Use whenever work should outlive the laptop session or run unattended."
 ---
 
-# Hand a project off to uv-mac-mini
+# Hand a project off to the mini
 
-Move an in-progress project to the mac mini so it keeps building while the laptop is closed,
-and so Sten can steer it from the Claude app.
+Move an in-progress project to an always-on remote Mac so it keeps building while the laptop is
+closed, and so the user can steer it from the Claude app.
 
 **The single thing that makes this work: use Remote Control *server* mode, not `claude -p`.**
 A `-p` run is a one-shot print job. It never appears in the app, and it cannot be steered even
 if it did — there is no prompt to type into. Server mode publishes an environment the app can
 spawn sessions into, which is the entire point of a machine nobody sits in front of.
 
-The mini's own setup repo (`~/git/mac-mini-setup`) documents this well. Read
-`rc-projects.txt` and `claude-remote-control.sh` there rather than inventing a parallel
-mechanism; a cron watchdog already restarts these every 15 minutes and after reboot.
+## Setup: which host
+
+Every `ssh` below targets `$HANDOFF_HOST`, the ssh alias of the remote machine (a `Host` block
+in `~/.ssh/config`). Check it first: `echo "$HANDOFF_HOST"`. If it is empty, ask the user for
+the alias and suggest they export it from their private shell config — never write the real
+hostname into this skill or any public file.
+
+The remote's own setup repo (`~/git/mac-mini-setup`) documents the Remote Control mechanism.
+Read `rc-projects.txt` and `claude-remote-control.sh` there rather than inventing a parallel
+one; a watchdog there already restarts these servers after a crash or reboot.
 
 ## Steps
 
@@ -32,19 +39,21 @@ git push -u origin master
 Private first; make it public at release. Before pushing, confirm no secrets or large data are
 tracked: `git ls-files | grep -E '^(data/|\.env$)'` should return only keepfiles.
 
-### 2. Clone on the mini, correct the remote again
+### 2. Clone on the remote, correct the remote URL again
 
 ```sh
-ssh uv-mac-mini 'cd ~/git && gh repo clone stamkivi/<name> && cd <name> &&
+ssh "$HANDOFF_HOST" 'cd ~/git && gh repo clone <name> && cd <name> &&
   git remote set-url origin "$(git remote get-url origin | sed "s|git@github.com:|https://github.com/|")"'
 ```
+
+`gh repo clone <name>` without an owner clones from the logged-in GitHub account.
 
 ### 3. Secrets
 
 `.env` is gitignored, so it does not travel with the repo. Pipe it over; never commit it.
 
 ```sh
-cat .env | ssh uv-mac-mini 'cat > ~/git/<name>/.env && chmod 600 ~/git/<name>/.env'
+cat .env | ssh "$HANDOFF_HOST" 'cat > ~/git/<name>/.env && chmod 600 ~/git/<name>/.env'
 ```
 
 Verify it loads with the shell environment unset, so you are testing the file and not a stale
@@ -53,7 +62,7 @@ export: `env -u SOME_KEY uv run python -c '...'`.
 ### 4. Environment and a green test run
 
 ```sh
-ssh uv-mac-mini 'cd ~/git/<name> && uv sync --extra dev && uv run pytest -q'
+ssh "$HANDOFF_HOST" 'cd ~/git/<name> && uv sync --extra dev && uv run pytest -q'
 ```
 
 ### 5. Trust the directory — skip this and the server hangs silently
@@ -62,11 +71,11 @@ ssh uv-mac-mini 'cd ~/git/<name> && uv sync --extra dev && uv run pytest -q'
 wait at that prompt forever while still looking connected.** It also blocks headless runs.
 
 ```sh
-ssh uv-mac-mini 'cp ~/.claude.json ~/.claude.json.bak.$(date +%s) && python3 - <<PY
+ssh "$HANDOFF_HOST" 'cp ~/.claude.json ~/.claude.json.bak.$(date +%s) && python3 - <<PY
 import json, os
 p = os.path.expanduser("~/.claude.json")
 d = json.load(open(p))
-proj = d.setdefault("projects", {}).setdefault("/Users/stentamkivi/git/<name>", {})
+proj = d.setdefault("projects", {}).setdefault(os.path.expanduser("~/git/<name>"), {})
 proj["hasTrustDialogAccepted"] = True
 proj["hasCompletedProjectOnboarding"] = True
 json.dump(d, open(p, "w"), indent=2)
@@ -77,16 +86,17 @@ PY'
 
 One server per project — a server's sessions are fixed to its cwd, and the project's
 `CLAUDE.md`, `.mcp.json` and `.claude/settings` only load when that directory is the cwd.
+`$HOME` below is inside single quotes, so it expands on the remote to an absolute path there.
 
 ```sh
-ssh uv-mac-mini 'grep -q "<name>" ~/git/mac-mini-setup/rc-projects.txt ||
-  printf "<key>  mini-<key>  /Users/stentamkivi/git/<name>\n" >> ~/git/mac-mini-setup/rc-projects.txt'
+ssh "$HANDOFF_HOST" 'grep -q "<name>" ~/git/mac-mini-setup/rc-projects.txt ||
+  printf "<key>  mini-<key>  $HOME/git/<name>\n" >> ~/git/mac-mini-setup/rc-projects.txt'
 
-ssh uv-mac-mini 'tmux new-session -d -s claude-rc-<key> \
-  "~/git/mac-mini-setup/claude-remote-control.sh mini-<key> /Users/stentamkivi/git/<name>"'
+ssh "$HANDOFF_HOST" 'tmux new-session -d -s claude-rc-<key> \
+  "~/git/mac-mini-setup/claude-remote-control.sh mini-<key> $HOME/git/<name>"'
 
 # Confirm it actually connected, do not assume:
-ssh uv-mac-mini 'tmux capture-pane -pt claude-rc-<key> | tail -6'   # expect "Connected · <name>"
+ssh "$HANDOFF_HOST" 'tmux capture-pane -pt claude-rc-<key> | tail -6'   # expect "Connected · <name>"
 ```
 
 Then `ListAgents` from the laptop session: the project should appear as `mini-<key> · Remote
@@ -99,10 +109,10 @@ repo. Write a `bootstrap.sh` in the project that fetches and caches it, make eve
 resumable, and start it detached *before* the Claude session needs it:
 
 ```sh
-ssh uv-mac-mini 'cd ~/git/<name> && nohup ./bootstrap.sh > bootstrap.log 2>&1 &'
+ssh "$HANDOFF_HOST" 'cd ~/git/<name> && nohup ./bootstrap.sh > bootstrap.log 2>&1 &'
 ```
 
-Check the mini's free disk first — it runs tight. `df -h ~`.
+Check the remote's free disk first: `df -h ~`.
 
 ### 8. Seed the session with a written brief
 
@@ -139,7 +149,7 @@ pushes succeed. Confirm with `git push` exit status rather than the warning text
 ## Checking in later
 
 ```sh
-ssh uv-mac-mini 'cd ~/git/<name> && tail -20 bootstrap.log && git log --oneline -5'
+ssh "$HANDOFF_HOST" 'cd ~/git/<name> && tail -20 bootstrap.log && git log --oneline -5'
 ```
 
 Or just read the GitHub repo — a well-briefed session pushes as it goes.
